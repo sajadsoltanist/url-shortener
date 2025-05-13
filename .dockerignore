@@ -1,0 +1,55 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.env
+
+# Development and IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Docker related
+Dockerfile
+docker-compose*.yml
+docker-compose*.yaml
+
+# Build related
+build/
+dist/
+*.egg-info/
+
+# Data and logs
+data/
+logs/
+*.log
+
+# Other
+*.bak
+*.tmp
+*.temp 
