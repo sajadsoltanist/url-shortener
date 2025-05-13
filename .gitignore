@@ -1,0 +1,52 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.env
+.env.*
+
+# SQLite DB
+*.sqlite3
+*.db
+*.db-journal
+
+# Migrations (optional)
+alembic/versions/*.pyc
+alembic/versions/__pycache__/
+
+# VS Code settings
+.vscode/
+
+# Pytest
+.cache/
+.pytest_cache/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+
+# Coverage reports
+htmlcov/
+coverage.xml
+*.cover
+*.py,cover
+
+# Logs
+*.log
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# IDEs
+.idea/
+*.iml
+jobs.sqlite
+logs/
