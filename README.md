@@ -1,245 +1,216 @@
+# SCALABILITY.md
 
-### 📄 `README.md`
+## Current Architecture
 
-
-# 🔗 URL Shortener – Python FastAPI Interview Task
-
-This is a simple, scalable URL shortening service built with **FastAPI**, **SQLModel**, and **Alembic**.
-
-This project is part of a technical interview process and is designed to showcase:
-- Clean architecture & maintainable code
-- Performance & scalability considerations
-- Logging and observability practices
-- Experience with SQLAlchemy / SQLModel, Alembic, and REST APIs
-
----
-
-## 🧩 Features
-
-- Create short URLs (`POST /shorten`)
-- Redirect to original URL (`GET /{short_code}`)
-- Track and view visit statistics (`GET /stats/{short_code}`)
-- Custom logging with middleware
-- Modular and scalable codebase structure
-
----
-
-## 🚀 Getting Started
-
-### Option 1: Using Docker (Recommended)
-
-The application comes with a fully configured Docker setup:
-
-```bash
-# Show available commands
-make help
-
-# Quick setup for development
-make setup
-
-# Access the API at http://localhost:8000/docs
-```
-
-### Option 2: Manual Setup
-
-#### 1. Clone the repo
-
-```bash
-git clone https://github.com/mahdimmr/url-shortener.git
-cd url-shortener
-```
-
-#### 2. Create virtual environment & install dependencies
-
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows use `venv\Scripts\activate`
-pip install -r requirements.txt
-```
-
-#### 3. Setup the database
-
-> By default, it uses PostgreSQL, Look at in `sample.env` PG_DSN.
-
-```bash
-cp sample.env .env
-alembic upgrade head
-```
-
-#### 4. Run the app
-
-```bash
-uvicorn app.main:app --reload
-```
-
-Open your browser at: [http://localhost:8000/docs](http://localhost:8000/docs)
-
----
-
-## 🐳 Docker Setup
-
-The project includes a comprehensive Docker setup with both production and development configurations:
-
-### Key Features
-
-- **Multi-stage builds** for optimized container images
-- **Automatic database migrations** on startup
-- **Health checks** for service dependencies
-- **Development mode** with hot reloading
-- **Comprehensive Makefile** with helpful commands
-
-### Makefile Commands
-
-```bash
-# Show all available commands
-make help
-
-# Development
-make build-dev    # Build development images
-make up-dev       # Start development environment
-make logs         # View logs from all containers
-make shell        # Open a shell in the API container
-make migrate      # Run database migrations
-
-# Production
-make build        # Build production images 
-make up           # Start production environment
-make down         # Stop production environment
-```
-
-For more details, see the [Docker README](docker/README.md).
-
----
-
-## 🧪 Running Tests
-
-```bash
-# Using Docker
-make test
-
-# Manually
-pytest
-```
-
----
-
-## 📁 Project Structure
+The URL shortener service follows a layered architecture with a clean separation of concerns:
 
 ```
-app/
-├── api/           # FastAPI routers
-├── core/          # Configuration, shared utilities
-├── db/            # Models, session, CRUD, migrations
-├── middleware/    # Logging or custom middleware
-├── main.py        # FastAPI app entrypoint
-
-docker/            # Docker configuration files
-├── Dockerfile     # Multi-stage build configuration
-├── docker-compose.yaml
-├── docker-compose.dev.yaml
-├── entrypoint.sh  # Container initialization script
-├── Makefile       # Helper commands
+                 ┌─────────┐
+                 │  Redis  │
+                 │  Cache  │◄────┐
+                 └────┬────┘     │
+                      │          │
+                      ▼          │
+┌────────┐      ┌───────────┐    │     ┌───────────┐
+│        │      │   Read    │    │     │           │
+│ Client ├─────►│  Service  ├────┴────►│ Database  │
+│        │      │ Instances │          │           │
+└────┬───┘      └───────────┘          └─────┬─────┘
+     │                                       │
+     │          ┌───────────┐                │
+     │          │  Write    │                │
+     └─────────►│  Service  ├────────────────┘
+                │ Instances │    
+                └─────┬─────┘    
+                      │          ┌────────────┐
+                      └─────────►│   Global   │
+                                 │  Counter   │
+                                 │  (Redis)   │
+                                 └────────────┘
 ```
 
----
+The system is built as an async-first application using FastAPI and SQLModel, with these key components:
 
-## 📌 Notes for Interviewers
+1. **API Gateway**: Routes requests to appropriate service instances
+2. **Read Service**: Handles URL redirection and statistics
+   - Reads from Redis cache first
+   - Falls back to database if cache misses
+   - Updates cache with retrieved values (LRU cache strategy)
+3. **Write Service**: Manages URL creation and updates
+   - Communicates with the global counter service using atomic Redis operations (`INCR`/`INCRBY`)
+   - Writes directly to the database
+4. **Redis**: Serves dual purposes:
+   - LRU cache for frequently accessed URLs
+   - Global counter for short code generation using atomic operations
+   - Redis Sentinel/Cluster for high availability and split-brain prevention
+5. **Database**: PostgreSQL for persistent storage
+   - Optimized schema with appropriate indexes
+   - Connection pooling for efficient access (configured to 2*CPU cores for optimal performance)
 
-- The implementation is scoped to take ~1 working day.
-- Logging is implemented using a custom middleware.
-- Visit tracking is minimal; can be extended to store timestamps/user-agent/etc.
-- Add any modules, files, or dependencies you find necessary.
-- In short: you're free to treat this as a real project.
-- For production: add rate limiting, background jobs for analytics, async DB access, etc.
-- We're more interested in how you think and structure your work than in having one "correct" answer. Good luck, and
-  enjoy the process!
+## Addressing Scaling Challenges
 
----
+### 1. Heavy Logging Without Performance Impact
 
-## 🧠 Bonus Ideas (if you have time)
+When logging becomes a heavy operation, we implement a multi-layered approach to ensure it doesn't affect request latency:
 
-- Custom short code support
-- Expiration time for URLs
-- Admin dashboard to view top URLs
-- Dockerfile & deployment configs
-
----
-
-# URL Shortener with Non-Blocking Redis Logging
-
-A URL shortening service built with FastAPI, SQLModel, PostgreSQL, and Redis.
-
-## Logging System Architecture
-
-This application features a high-performance, non-blocking logging middleware designed for production environments:
-
-### Key Features
-
-- **Completely Non-Blocking**: Logging operations have zero impact on request latency
-- **Redis-Backed Message Queue**: Uses Redis for storing log messages before processing
-- **Structured Logging with Loguru**: Rich, structured log output with proper rotation and retention
-- **Batch Processing**: Efficient batch processing of logs for optimal performance
-- **Rich Contextual Data**: Captures detailed request information for comprehensive logging
-- **Graceful Degradation**: Automatic fallback to local memory queue when Redis is unavailable
-
-### Architecture
-
-1. **Middleware Layer**: 
-   - Captures request/response data
-   - Publishes to Redis queue without blocking
-   - Falls back to local queue when Redis is unavailable
-
-2. **Worker Process**:
-   - Consumes logs from Redis in batches
-   - Efficiently writes logs to files using Loguru
-   - Handles reconnections and retries when Redis is down
-
-3. **Redis Connection Management**:
-   - Connection pooling for optimal performance
-   - Automatic reconnection with exponential backoff
-   - Health monitoring and recovery
-
-## Running the Application
-
-### With Docker Compose
-
-```bash
-# Start all services (API, Redis, DB)
-make up-dev
-
-# Check logs
-make logs
-```
-
-### Configuration
-
-Key environment variables:
+#### Asynchronous Logging Pipeline
 
 ```
-# Redis Logging Settings
-REDIS_LOGGING_ENABLED=true            # Enable/disable Redis logging
-REDIS_LOGGING_QUEUE=app:logs          # Redis queue name
-REDIS_LOGGING_BATCH_SIZE=100          # Batch size for log processing
-REDIS_LOGGING_FLUSH_INTERVAL=5.0      # Max seconds between batch flushes
-REDIS_LOGGING_FALLBACK_LOCAL=true     # Enable fallback to local memory
+Request → FastAPI → [Non-blocking log collection] → [Buffer] → Background processor → External storage
 ```
 
-## Log File Configuration
+#### Implementation Details
 
-Logs are written to:
-- Location: `./logs/app.log`
-- Format: JSON (structured logging)
-- Rotation: 10MB file size
-- Retention: 7 days
+1. **OpenTelemetry Collection Layer**
+   - Deploy OpenTelemetry collector as a sidecar or separate deployment in Kubernetes
+   - Configure batch exporting with appropriate buffer sizes and flush intervals
+   - Implement exemplar linking for high-cardinality metrics
 
-## Implementation Details
+2. **Structured Logging & Dynamic Sampling**
+   - JSON-formatted logs for efficient indexing in ELK/Loki systems
+   - Dynamic sampling rates: 100% for errors, configurable percentage for successful requests
+   - Log level adjustment based on system load (DEBUG → INFO → WARN)
 
-The logging system follows SOLID principles:
+3. **Buffer-based Logging Architecture**
+   - In-memory ring buffer with configurable size
+   - Circuit breaker pattern to prevent application crash during logging system failure
+   - Background flushing on time or size thresholds
 
-- **Single Responsibility**: Each component handles one aspect of logging
-- **Open/Closed**: Components are extensible without modification
-- **Liskov Substitution**: Proper abstractions for logging interfaces
-- **Interface Segregation**: Focused interfaces for logging operations
-- **Dependency Inversion**: Dependencies are injected for flexibility
+4. **Distributed Task Processing**
+   - Celery 5.x with Redis Streams or RabbitMQ as broker
+   - Configured with `acks_late=True` and `max_retries=3` for resilience
+   - Idempotent task design to handle potential duplicates during worker timeouts
 
----
+5. **High-Volume Log Transport (for extreme scale)**
+   - Kafka/Pulsar log bus when exceeding 100K+ events/second
+   - Decouple log producers from consumers completely
+
+### 2. Multi-Instance Deployment Across Different Servers
+
+To scale horizontally across multiple instances and servers, we implement:
+
+#### Service Decoupling & Externalization
+
+1. **Kubernetes Orchestration**
+   - Service discovery for internal communication
+   - Health probes (readiness/liveness) to ensure traffic routes only to healthy instances
+   - Proper termination grace periods to handle in-flight requests
+
+2. **Python Concurrency Optimization**
+   - Overcome GIL limitations using uvicorn with gunicorn (workers=cpu*2)
+   - Asynchronous I/O operations throughout the codebase
+   - Offload CPU-intensive tasks to separate processes
+
+3. **State Management**
+   - All application instances remain stateless
+   - Redis for distributed caching and atomic counter operations
+   - Distributed locking for critical sections when necessary
+
+#### Database Strategy
+
+1. **Hash-based Sharding on `short_code`**
+   - Implement consistent hashing algorithm to minimize data movement during resharding
+   - Apply a well-distributed hash function (MurmurHash or xxHash) to the `short_code`
+   - Determine shard using modulo: `shard_id = hash(short_code) % num_shards`
+
+2. **ID Generation**
+   - **Block Allocator Pattern**: Allocate blocks of 10K/100K IDs to each writer service
+   - **Snowflake-inspired IDs** (for future implementation):
+     ```
+     5 bits shard_id | 41 bits timestamp(ms) | 18 bits sequence
+     ```
+
+#### Potential Risks & Mitigation
+
+| Risk | Mitigation |
+|------|------------|
+| Redis Split-Brain | Redis Sentinel/Cluster with proper quorum settings; application-level consistency validation |
+| Database replication lag | Monitor lag metrics; implement stale read detection; consider read-your-writes consistency |
+| Service version compatibility | Semantic versioning; backward compatibility; blue/green deployments |
+| Network partition | Retries with exponential backoff; circuit breakers; fallback strategies |
+| Uneven load distribution | Load balancing algorithms review; health metrics monitoring; auto-scaling based on CPU/memory |
+
+### 3. High-Traffic Marketing Campaign Management
+
+To handle thousands of requests per second during high-traffic periods:
+
+#### Multi-level Caching Strategy 
+
+1. **Three-Level Cache Architecture**
+   - L1: In-process cache (Python dict with TTL) for zero-latency hits
+   - L2: Redis cache with appropriate eviction policies
+   - L3: Database
+
+2. **CDN Integration**
+   - Edge caching for popular redirects
+   - CDN edge functions (Cloudflare Workers) to serve redirects without hitting backend
+   - Cache warming for anticipated high-volume URLs
+
+#### Traffic Management
+
+1. **Rate Limiting Implementation**
+   - Token bucket algorithm with Redis using `CL.THROTTLE` (Redis Bloom module) or Lua scripts
+   - Proper 429 responses with Retry-After headers
+   - Client-specific rate limits with configurable tiers
+
+2. **Circuit Breakers**
+   - Protect downstream dependencies from cascading failures
+   - Configurable failure thresholds and recovery periods
+   - Fallback mechanisms for degraded operation
+
+3. **Graceful Degradation**
+   - Feature toggles for non-critical functionality
+   - Statistics recording could be temporarily disabled
+   - Tiered service levels based on load
+
+#### Database Optimizations
+
+1. **Connection Pooling**
+   - Properly sized connection pools
+   - Statement timeout configuration
+   - pgBouncer for connection pooling at scale
+
+2. **Query Optimization**
+   - Targeted indexes on `short_code`
+   - Prepared statements
+   - Read replicas for scaling read operations
+
+3. **Hot Partition Prevention**
+   - Link bucketing with random prefix for high-volume campaigns
+   - Traffic distribution analysis to detect and mitigate hotspots
+
+#### Auto-Scaling & Monitoring
+
+1. **Kubernetes HPA (Horizontal Pod Autoscaler)**
+   - Scale based on CPU/memory metrics
+   - Custom metrics from Prometheus for targeted scaling
+   - Predictive scaling based on time-of-day patterns
+
+2. **Real-time Monitoring**
+   - Prometheus + Grafana dashboards
+   - Critical alerts with proper escalation policies
+   - Business metrics (redirect volume, latency, error rates)
+
+## Implementation Roadmap
+
+| Phase | Focus | Key Components | Timeline |
+|-------|-------|----------------|----------|
+| Now | Core Scalability | Service separation, Redis caching, Basic observability | Current |
+| Next | Resilience | Circuit breakers, Rate limiting, Improved monitoring | 1-2 months |
+| Later | Advanced Scale | Sharding implementation, CDN integration, Edge functions | 3-6 months |
+
+## Success Metrics & SLOs
+
+- **Redirect Latency**: p99 < 50ms at 1K RPS
+- **Availability**: 99.95% uptime
+- **Cache Hit Ratio**: > 95%
+- **Error Rate**: < 0.1% of total requests
+
+## Security Considerations
+
+While not explicitly mentioned in the original requirements, a production-grade system must address:
+
+- **HTTPS Only** with HSTS headers
+- **Secret Management** via Vault/AWS Parameter Store
+- **Data Governance** with proper retention policies
+- **GDPR Compliance** for IP address handling in logs
