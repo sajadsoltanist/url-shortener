@@ -23,6 +23,8 @@ from app.models.click import ClickEvent
 
 
 # Test database URL - using SQLite in-memory
+# Note: this implementation is based on the following article:
+# https://sqlmodel.tiangolo.com/tutorial/fastapi/tests/#configure-the-in-memory-database
 TEST_SQLALCHEMY_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
