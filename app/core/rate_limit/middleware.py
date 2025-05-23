@@ -30,12 +30,12 @@ def setup_rate_limiting(app: FastAPI) -> ResilientRateLimitBackend:
     rate_limit_config = {
         # API endpoints: 1 request per second per IP
         r"^/api/": [
-            Rule(second=1, group="api"),  # 1 request per second for API endpoints
+            Rule(second=30, group="api"),  # 1 request per second for API endpoints
             Rule(group="admin")  # No limits for admin group
         ],
         # Public endpoints: 5 requests per minute per IP
         r"^/": [
-            Rule(minute=5, group="public"),  # 5 requests per minute for public endpoints
+            Rule(minute=30, group="public"),  # 5 requests per minute for public endpoints
             Rule(group="admin")  # No limits for admin group
         ]
     }
@@ -45,7 +45,8 @@ def setup_rate_limiting(app: FastAPI) -> ResilientRateLimitBackend:
         RateLimitMiddleware,
         authenticate=simple_auth,
         backend=backend,
-        config=rate_limit_config
+        config=rate_limit_config,
+        on_blocked=custom_on_blocked
     )
     
     logger.info("Rate limiting middleware added with Redis backend")
@@ -56,12 +57,18 @@ async def initialize_rate_limiting() -> None:
     """Initialize rate limiting backend during application startup."""
     global rate_limit_backend
     if rate_limit_backend:
-        await rate_limit_backend.initialize()
-        logger.info("Rate limiting backend initialized")
+        try:
+            await rate_limit_backend.initialize()
+            logger.info("Rate limiting backend initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize rate limiting backend: {e}")
 
 async def close_rate_limiting() -> None:
     """Close rate limiting backend during application shutdown."""
     global rate_limit_backend
     if rate_limit_backend:
-        await rate_limit_backend.close()
-        logger.info("Rate limiting backend closed") 
+        try:
+            await rate_limit_backend.close()
+            logger.info("Rate limiting backend closed")
+        except Exception as e:
+            logger.error(f"Failed to close rate limiting backend: {e}")
