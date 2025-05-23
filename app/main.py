@@ -6,15 +6,21 @@ and configures middleware and exception handlers.
 
 import os
 import sys
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
 import time
 import asyncio
 import traceback
 import json
+import logging
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
+# Import OpenTelemetry modules first
+from opentelemetry import trace, metrics
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+# Import application modules
 from app.api import api_router
 from app.core.config import settings
 from app.core.logging import setup_logging
@@ -22,6 +28,8 @@ from app.core.redis import redis_manager
 from app.core.url_logger import setup_url_logging
 # Database resilience imports are disabled for now
 # from app.db import initialize_database_connection, circuit_breaker
+from app.core.telemetry import setup_telemetry, instrument_app
+from app.middleware.tracing import TracingMiddleware
 
 # Rate limiting imports
 from app.core.rate_limit import (
@@ -41,7 +49,16 @@ os.makedirs(settings.LOG_DIR, exist_ok=True)
 # Setup logging
 logger = setup_logging()
 
-# We'll initialize URL logging later in the startup event to avoid affecting global logging
+# Initialize OpenTelemetry before creating the FastAPI app
+if settings.OTEL_ENABLED:
+    try:
+        logger.info("Initializing OpenTelemetry")
+        setup_telemetry()
+        logger.info("OpenTelemetry initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenTelemetry: {e}")
+        logger.error(f"Exception traceback: {traceback.format_exc()}")
+        logger.warning("OpenTelemetry could not be initialized")
 
 # Create FastAPI app
 app = FastAPI(
@@ -59,6 +76,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add custom tracing middleware if telemetry is enabled
+if settings.OTEL_ENABLED:
+    # Add tracing middleware
+    app.add_middleware(TracingMiddleware)
+    logger.info("Custom tracing middleware added")
 
 # Store the rate limit backend for access in startup/shutdown events
 rate_limit_backend = None
@@ -144,6 +167,21 @@ async def startup_event():
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
     
+    # Initialize OpenTelemetry database and redis instrumentation
+    if settings.OTEL_ENABLED:
+        try:
+            # Database and Redis client instrumentation only
+            from app.db.base import engine
+            redis_client = await redis_manager.get_client()
+            
+            # Instrument dependencies only (not the app, which was done earlier)
+            instrument_app(db_engine=engine, redis_client=redis_client)
+            logger.info("OpenTelemetry dependencies instrumentation completed")
+        except Exception as e:
+            logger.error(f"Failed to instrument dependencies: {e}")
+            logger.error(f"Exception traceback: {traceback.format_exc()}")
+            logger.warning("Dependencies instrumentation could not be enabled")
+    
     # Initialize URL access logging
     from app.core.url_logger import setup_url_logging
     setup_url_logging()
@@ -161,7 +199,6 @@ async def startup_event():
     # Initialize the rate limit backend if it exists
     global rate_limit_backend
     if rate_limit_backend is not None:
-        logger.info("Initializing rate limit backend")
         await initialize_rate_limiting()
     
     # Log rate limit settings at debug level
@@ -178,9 +215,7 @@ async def startup_event():
         scheduler_service.start()
         logger.info("Scheduler started successfully")
     except Exception as e:
-        logger.error("Error starting scheduler", error=str(e))
-        logger.error(f"Exception traceback: {traceback.format_exc()}")
-        logger.critical("Scheduler could not be started")
+        logger.error(f"Failed to start scheduler: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -193,8 +228,7 @@ async def shutdown_event():
     
     # Shutdown the scheduler
     try:
-        logger.info("Shutting down scheduler")
         scheduler_service.shutdown()
         logger.info("Scheduler shut down successfully")
     except Exception as e:
-        logger.error("Error shutting down scheduler", error=str(e))
+        logger.error(f"Error shutting down scheduler: {e}")
