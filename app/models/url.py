@@ -31,8 +31,7 @@ class ShortURLBase(SQLModel):
     )
     expires_at: Optional[datetime] = Field(
         default=None,
-        description="When this short URL expires (null means no expiration)",
-        sa_column_kwargs={"index": True}
+        description="When this short URL expires (null means no expiration)"
     )
     click_count: int = Field(
         default=0,
