@@ -16,14 +16,13 @@ RUN apt-get update && \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 - && \
-    ln -s /root/.local/bin/poetry /usr/local/bin/
+# Set up virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies first (for better layer caching)
-COPY pyproject.toml poetry.lock* ./
-RUN poetry export -f requirements.txt > requirements.txt && \
-    pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Second stage - Runtime
 FROM python:3.11-slim-bullseye
@@ -46,17 +45,18 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     libpq5 \
     curl \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Python dependencies from builder stage
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy virtual environment from builder stage
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy application code
-COPY --chown=appuser:appuser ./app /app/app
-COPY --chown=appuser:appuser ./migrations /app/migrations
-COPY --chown=appuser:appuser ./alembic.ini /app/alembic.ini
-COPY --chown=appuser:appuser ./docker/entrypoint.sh /app/entrypoint.sh
+COPY --chown=appuser:appuser app /app/app
+COPY --chown=appuser:appuser migrations /app/migrations
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
+COPY --chown=appuser:appuser docker/entrypoint.sh /app/entrypoint.sh
 
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
@@ -66,10 +66,6 @@ USER appuser
 
 # Expose application port
 EXPOSE 8000
-
-# Healthcheck to verify application is running properly
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8000/api/health || exit 1
 
 # Set metadata
 LABEL maintainer="URL Shortener Team" \
