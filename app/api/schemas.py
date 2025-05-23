@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 
-from pydantic import BaseModel, HttpUrl, Field, validator
+from pydantic import BaseModel, HttpUrl, Field, field_validator
 from pydantic.networks import AnyHttpUrl
 
 
@@ -26,7 +26,7 @@ class URLCreateRequest(BaseModel):
     expiration_days: Optional[int] = Field(None, ge=1)
     
     # Convert HttpUrl to string for SQLAlchemy compatibility
-    @validator('original_url')
+    @field_validator('original_url')
     def convert_url_to_str(cls, v):
         return str(v)
 

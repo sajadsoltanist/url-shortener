@@ -4,7 +4,7 @@ This module defines the ShortURL model for storing shortened URLs in the databas
 """
 from datetime import datetime, timedelta
 from typing import List, Optional, TYPE_CHECKING
-from pydantic import HttpUrl, validator
+from pydantic import HttpUrl, field_validator
 
 from sqlalchemy import Index, func, text
 from sqlmodel import Field, Relationship, SQLModel
@@ -39,7 +39,7 @@ class ShortURLBase(SQLModel):
     )
 
     # Validator to ensure original_url is stored as string
-    @validator('original_url', pre=True)
+    @field_validator('original_url', mode='before')
     def ensure_str_url(cls, v):
         if hasattr(v, '__str__'):
             return str(v)
