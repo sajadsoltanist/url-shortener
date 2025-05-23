@@ -72,11 +72,11 @@ class Settings(BaseSettings):
     RATE_LIMIT_SHORTEN: int = 10  # Rate limit for URL shortening
     RATE_LIMIT_REDIRECT: int = 60  # Rate limit for redirects
       # PostgreSQL settings
-    POSTGRES_SERVER: str = os.getenv("DATABASE_HOST", "localhost")
-    POSTGRES_PORT: int = int(os.getenv("DATABASE_PORT", "5432"))
-    POSTGRES_USER: str = os.getenv("DATABASE_USER", "postgres")
-    POSTGRES_PASSWORD: str = os.getenv("DATABASE_PASSWORD", "postgres")
-    POSTGRES_DB: str = os.getenv("DATABASE_NAME", "url_shortener")
+    POSTGRES_SERVER: str = Field(default="localhost", env="DATABASE_HOST")
+    POSTGRES_PORT: int = Field(default=5432, env="DATABASE_PORT")
+    POSTGRES_USER: str = Field(default="postgres", env="DATABASE_USER")
+    POSTGRES_PASSWORD: str = Field(default="postgres", env="DATABASE_PASSWORD")
+    POSTGRES_DB: str = Field(default="url_shortener", env="DATABASE_NAME")
     
     # PostgreSQL pool settings
     POSTGRES_POOL_SIZE: int = 20
