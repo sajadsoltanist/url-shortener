@@ -31,17 +31,19 @@ services:
       - DEBUG=true
       - LOG_LEVEL=debug
       - API_PREFIX=/api
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:8000,http://api:8000
       - RELOAD=true
+      - DEFAULT_EXPIRATION_DAYS=30
+      - BASE_URL=http://api:8000
+      - PYTHONPATH=/app
+    working_dir: /app
     volumes:
-      - ../app:/app/app  # Mount app directory for hot reloading
-      - ../migrations:/app/migrations
-      - ../alembic.ini:/app/alembic.ini
-      - app_logs_dev:/app/logs
+      - ../:/app  # Mount the entire project directory
     networks:
       - app_network_dev
-    command: >
-      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # Use entrypoint script directly
+    entrypoint: ["/bin/bash", "-c", "chmod +x /app/docker/entrypoint.sh && /app/docker/entrypoint.sh"]
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     # No health check in dev mode to avoid issues during code changes
 
   # PostgreSQL database for development
@@ -86,24 +88,6 @@ services:
       retries: 3
       start_period: 5s
 
-  # Optional: pgAdmin for database management in development
-  pgadmin:
-    image: dpage/pgadmin4
-    container_name: url-shortener-pgadmin
-    restart: unless-stopped
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@localhost.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
-      - PGADMIN_LISTEN_PORT=5050
-    ports:
-      - "5050:5050"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      - app_network_dev
-    depends_on:
-      - db
-
 volumes:
   postgres_data_dev:
     name: url-shortener-postgres-data-dev
@@ -111,8 +95,6 @@ volumes:
     name: url-shortener-redis-data-dev
   app_logs_dev:
     name: url-shortener-logs-dev
-  pgadmin_data:
-    name: url-shortener-pgadmin-data
 
 networks:
   app_network_dev:
