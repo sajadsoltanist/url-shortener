@@ -6,6 +6,7 @@ loaded from environment variables with appropriate defaults.
 
 from __future__ import annotations
 
+import os
 import string
 from typing import Optional, Dict, Any, List, Union
 from enum import Enum
@@ -57,7 +58,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     
     # CORS settings
-    CORS_ORIGINS: List[str] = ["*"]  # Allow all origins by default
+    CORS_ORIGINS: Union[List[str], str] = ["*"]  # Allow all origins by default
     
     # URL Shortening Configuration
     URL_CODE_LENGTH: int = 6  # Default length for short codes
@@ -70,13 +71,12 @@ class Settings(BaseSettings):
     # Rate limiting settings (requests per minute per IP)
     RATE_LIMIT_SHORTEN: int = 10  # Rate limit for URL shortening
     RATE_LIMIT_REDIRECT: int = 60  # Rate limit for redirects
-    
-    # PostgreSQL settings
-    POSTGRES_SERVER: str = "localhost"
-    POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "postgres"
-    POSTGRES_DB: str = "url_shortener"
+      # PostgreSQL settings
+    POSTGRES_SERVER: str = Field(default="localhost", env="DATABASE_HOST")
+    POSTGRES_PORT: int = Field(default=5432, env="DATABASE_PORT")
+    POSTGRES_USER: str = Field(default="postgres", env="DATABASE_USER")
+    POSTGRES_PASSWORD: str = Field(default="postgres", env="DATABASE_PASSWORD")
+    POSTGRES_DB: str = Field(default="url_shortener", env="DATABASE_NAME")
     
     # PostgreSQL pool settings
     POSTGRES_POOL_SIZE: int = 20
@@ -97,12 +97,11 @@ class Settings(BaseSettings):
     DB_CIRCUIT_BREAKER_RECOVERY_TIME: float = 30.0  # Seconds before trying half-open state
     DB_CIRCUIT_BREAKER_SUCCESS_THRESHOLD: int = 3  # Successes in half-open to close circuit
     DB_CIRCUIT_BREAKER_TIMEOUT: float = 3.0  # Seconds before timing out a database operation
-    
-    # Redis settings
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_PASSWORD: str = ""
-    REDIS_DB: int = 0
+      # Redis settings
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_PASSWORD: str = os.getenv("REDIS_PASSWORD", "")
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     
     # Cache settings
     CACHE_TIMEOUT: int = 3600
@@ -112,8 +111,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_DEFAULT: int = 1  # Default requests per minute
     RATE_LIMIT_STRATEGY: str = "moving-window"
-    RATE_LIMIT_ADMIN_IPS: List[str] = []  # IPs that bypass rate limits
-    RATE_LIMIT_ADMIN_API_KEYS: List[str] = []  # API keys that bypass rate limits
+    RATE_LIMIT_ADMIN_IPS: Union[List[str], str] = []  # IPs that bypass rate limits
+    RATE_LIMIT_ADMIN_API_KEYS: Union[List[str], str] = []  # API keys that bypass rate limits
     
     # Rate limiting backend resilience configuration
     RATE_LIMIT_REDIS_CHECK_INTERVAL: int = 10  # Seconds between Redis health checks
@@ -190,6 +189,18 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_PROTOCOL: str = "grpc"  # Protocol to use for OTLP export (grpc or http/protobuf)
     
     # Validators
+    @field_validator("DEFAULT_EXPIRATION_DAYS", mode="before")
+    def validate_expiration_days(cls, v: Any) -> Optional[int]:
+        """Convert empty string to None for DEFAULT_EXPIRATION_DAYS."""
+        if v == "":
+            return None
+        if v is None:
+            return None
+        try:
+            return int(v)
+        except (ValueError, TypeError):
+            return None
+    
     @field_validator("SECRET_KEY")
     def validate_secret_key(cls, v: str, info: ValidationInfo) -> str:
         default_value = "change_this_to_a_secure_random_string_in_production"
@@ -201,6 +212,20 @@ class Settings(BaseSettings):
             # Only warn during validation, don't block startup
             # In a real production app, you might want to raise an error here
             logger.warning("Using default SECRET_KEY in production environment! This is a security risk.")
+        return v
+    
+    @field_validator("CORS_ORIGINS", "RATE_LIMIT_ADMIN_IPS", "RATE_LIMIT_ADMIN_API_KEYS")
+    def validate_list_or_string(cls, v: Union[List[str], str]) -> List[str]:
+        """Convert comma-separated string to list if needed."""
+        if isinstance(v, str):
+            # If it's an empty string, return an empty list
+            if not v.strip():
+                return []
+            # If it's a single "*", keep it as a list with one element
+            if v == "*":
+                return ["*"]
+            # Otherwise split by comma and strip whitespace
+            return [item.strip() for item in v.split(",")]
         return v
     
     # Computed fields

@@ -58,7 +58,7 @@ def setup_logging() -> None:
     if settings.DEBUG:
         logger.add(
             sys.stderr,
-            level=settings.LOG_LEVEL,
+            level=settings.LOG_LEVEL.upper(),  # Convert to uppercase to handle case-insensitivity
             format=settings.LOG_FORMAT,
             backtrace=True,
             diagnose=True,
@@ -71,7 +71,7 @@ def setup_logging() -> None:
         # Use built-in serialization instead of custom formatter
         logger.add(
             log_file_path,
-            level=settings.LOG_LEVEL,
+            level=settings.LOG_LEVEL.upper(),
             serialize=True,  # This enables JSON serialization
             rotation=settings.LOG_ROTATION,
             retention=settings.LOG_RETENTION,
@@ -81,7 +81,7 @@ def setup_logging() -> None:
         # Text formatter
         logger.add(
             log_file_path,
-            level=settings.LOG_LEVEL,
+            level=settings.LOG_LEVEL.upper(),
             format=settings.LOG_FORMAT,
             rotation=settings.LOG_ROTATION,
             retention=settings.LOG_RETENTION,
