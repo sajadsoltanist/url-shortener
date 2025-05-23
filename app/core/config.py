@@ -123,15 +123,15 @@ class Settings(BaseSettings):
     # This can be overridden with environment variables
     RATE_LIMIT_CONFIG: Dict[str, List[Dict[str, Any]]] = {
         r"^/api/": [
-            {"second": 1, "group": "default"},  # Strict 1 req/sec for most APIs
+            {"second": 30, "group": "default"},  # Strict 1 req/sec for most APIs
             {"group": "admin"},  # No limit for admin group
         ],
         r"^/api/shorten": [
-            {"second": 1, "group": "default"},  # Strict 1 req/sec for shortening
+            {"second": 30, "group": "default"},  # Strict 1 req/sec for shortening
             {"group": "admin"},
         ],
         r"^/api/urls": [
-            {"second": 1, "group": "default"},  # Strict 1 req/sec for URL info
+            {"second": 30, "group": "default"},  # Strict 1 req/sec for URL info
             {"group": "admin"},
         ],
     }
@@ -173,6 +173,21 @@ class Settings(BaseSettings):
     SCHEDULER_JOB_COALESCE: bool = True  # Combine multiple pending executions of a job into a single execution
     SCHEDULER_JOB_MAX_INSTANCES: int = 1  # Maximum instances of the same job to run concurrently
     SCHEDULER_MISFIRE_GRACE_TIME: int = 15 * 60  # Seconds to still run misfired job after scheduled time
+    
+    # OpenTelemetry configuration
+    OTEL_ENABLED: bool = True  # Enable/disable OpenTelemetry instrumentation
+    OTEL_SERVICE_NAME: str = "url-shortener"  # Service name for traces
+    OTEL_RESOURCE_ATTRIBUTES: str = "service.namespace=url-shortener,deployment.environment=development"  # Resource attributes
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"  # OTLP exporter endpoint for traces/metrics
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: str = "http://localhost:4317"  # OTLP metrics endpoint
+    OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: str = "http://localhost:4318"  # OTLP logs endpoint
+    OTEL_TRACES_SAMPLER: str = "parentbased_traceidratio"  # Sampling strategy
+    OTEL_TRACES_SAMPLER_ARG: float = 1.0  # Sample 100% of traces by default
+    OTEL_PROPAGATORS: str = "tracecontext,baggage"  # Propagators to use
+    OTEL_PYTHON_LOG_CORRELATION: bool = True  # Enable log correlation
+    OTEL_PYTHON_LOG_LEVEL: str = "INFO"  # Log level for OpenTelemetry
+    OTEL_METRICS_EXPORT_INTERVAL_MILLIS: int = 60000  # Export metrics every 60 seconds
+    OTEL_EXPORTER_OTLP_PROTOCOL: str = "grpc"  # Protocol to use for OTLP export (grpc or http/protobuf)
     
     # Validators
     @field_validator("SECRET_KEY")
